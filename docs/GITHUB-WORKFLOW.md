@@ -35,7 +35,23 @@ Feature branches and pull requests are recommended for larger changes. They keep
 4. Publishes the self-contained Windows application.
 5. Stores `DraftLedger-win-x64.zip` as a workflow artifact for 14 days.
 
-The workflow does not publish a GitHub Release automatically. Release publishing remains a deliberate step so an unreviewed commit cannot replace the public download.
+## Versioned releases
+
+The root `VERSION` file controls release publication. When a commit changes `VERSION` on `main`, `.github/workflows/release.yml`:
+
+1. Confirms that `VERSION`, the application project version, and release notes agree.
+2. Runs the full Windows build and tests.
+3. Creates a matching version tag.
+4. Creates the GitHub Release and marks it latest.
+5. Attaches `DraftLedger-win-x64.zip`.
+
+For the next release, update all three version references, commit the changes, and push:
+
+- `VERSION`
+- `src/DraftLedger.App/DraftLedger.App.csproj`
+- `docs/RELEASE-NOTES.md`
+
+The workflow refuses to replace an existing release. Increment the version for every published build.
 
 ## Screenshot maintenance
 
