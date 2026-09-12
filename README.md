@@ -19,9 +19,9 @@ The following images are repository placeholders. Replace them with current appl
 
 | Main writing workspace | Themes |
 | --- | --- |
-| ![DraftLedger main interface screenshot placeholder](docs/screenshots/main-interface.svg) | ![DraftLedger themes screenshot placeholder](docs/screenshots/themes.svg) |
+| ![DraftLedger main interface screenshot placeholder](docs/screenshots/writing_library.png) | ![DraftLedger themes screenshot placeholder](docs/screenshots/themes.png) |
 | **AI writing** | **Memory and continuity** |
-| ![DraftLedger AI writing screenshot placeholder](docs/screenshots/ai-writing.svg) | ![DraftLedger memory screenshot placeholder](docs/screenshots/memory.svg) |
+| ![DraftLedger AI writing screenshot placeholder](docs/screenshots/ai_writing.png) | ![DraftLedger memory screenshot placeholder](docs/screenshots/memory.png) |
 
 ## Highlights
 
