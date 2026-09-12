@@ -1,0 +1,17 @@
+<Window x:Class="DraftLedger.App.StoryDetailsWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="Story details | DraftLedger" Icon="Assets/DraftLedger.ico" Width="680" Height="720" MinWidth="560" MinHeight="600" WindowStartupLocation="CenterOwner" Closing="Window_Closing">
+  <DockPanel Margin="24">
+    <StackPanel DockPanel.Dock="Bottom"><TextBlock x:Name="StatusText" TextWrapping="Wrap" Margin="0,8" Foreground="{DynamicResource MutedBrush}" /><StackPanel Orientation="Horizontal" HorizontalAlignment="Right"><Button Content="Cancel" IsCancel="True" /><Button x:Name="SaveButton" Content="Save details" Click="Save_Click" IsDefault="True" Style="{StaticResource PrimaryButton}" /></StackPanel></StackPanel>
+    <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel>
+      <TextBlock Text="Story details" FontFamily="Georgia" FontSize="28" Margin="0,0,0,16" />
+      <TextBlock Text="Title" /><TextBox x:Name="TitleBox" Margin="0,6,0,12" />
+      <TextBlock Text="Author" /><TextBox x:Name="AuthorBox" Margin="0,6,0,12" />
+      <TextBlock Text="Status" /><ComboBox x:Name="StatusSelector" Margin="0,6,0,3" ToolTip="Planned: outlining only. Drafting: actively writing. Revising: editing an existing draft. Complete: finished." />
+      <TextBlock Text="Planned: outlining · Drafting: writing · Revising: editing · Complete: finished" FontSize="11" Foreground="{DynamicResource MutedBrush}" Margin="2,0,0,12" />
+      <TextBlock Text="Word target" /><TextBox x:Name="TargetBox" Margin="0,6,0,12" />
+      <CheckBox x:Name="MemoryToggle" Content="Enable long-story memory and continuity" ToolTip="Adds approved story-bible facts, chapter summaries, open plot threads, and relevant earlier passages to AI requests." />
+      <DockPanel Margin="0,12,0,6"><Button x:Name="GenerateButton" Content="Generate synopsis with AI" DockPanel.Dock="Right" Click="Generate_Click" /><TextBlock Text="Synopsis" VerticalAlignment="Center" /></DockPanel>
+      <TextBox x:Name="SynopsisBox" Height="220" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" />
+      <TextBlock Text="Generated text remains editable and is not saved until you choose Save details. For long stories, approved chapter summaries are used to preserve full-story coverage." TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource MutedBrush}" Margin="2,8,0,0" />
+    </StackPanel></ScrollViewer>
+  </DockPanel>
+</Window>

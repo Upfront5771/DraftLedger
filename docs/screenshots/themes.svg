@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="675" viewBox="0 0 1200 675" role="img" aria-labelledby="title desc">
+  <title id="title">DraftLedger themes screenshot placeholder</title>
+  <desc id="desc">Placeholder for screenshots showcasing DraftLedger themes.</desc>
+  <rect width="1200" height="675" rx="24" fill="#111820"/>
+  <g transform="translate(54 50)">
+    <g><rect width="522" height="245" rx="16" fill="#f6f0e4"/><rect width="522" height="46" rx="16" fill="#87523a"/><rect x="26" y="76" width="120" height="140" rx="8" fill="#e3d7c6"/><rect x="164" y="76" width="332" height="140" rx="8" fill="#fffdf7"/><text x="26" y="235" font-family="Segoe UI" font-size="16" fill="#2e2923">Pen &amp; Paper</text></g>
+    <g transform="translate(570 0)"><rect width="522" height="245" rx="16" fill="#dce5dc"/><rect width="522" height="46" rx="16" fill="#5f7a61"/><rect x="26" y="76" width="120" height="140" rx="8" fill="#c6d4c5"/><rect x="164" y="76" width="332" height="140" rx="8" fill="#f4f6ef"/><text x="26" y="235" font-family="Segoe UI" font-size="16" fill="#273529">Muted Sage</text></g>
+    <g transform="translate(0 280)"><rect width="522" height="245" rx="16" fill="#111820"/><rect width="522" height="46" rx="16" fill="#27465f"/><rect x="26" y="76" width="120" height="140" rx="8" fill="#1a2733"/><rect x="164" y="76" width="332" height="140" rx="8" fill="#202f3d"/><text x="26" y="235" font-family="Segoe UI" font-size="16" fill="#dbe9f4">Midnight Ink</text></g>
+    <g transform="translate(570 280)"><rect width="522" height="245" rx="16" fill="#08120d"/><rect width="522" height="46" rx="16" fill="#167447"/><rect x="26" y="76" width="120" height="140" rx="8" fill="#0d2015"/><rect x="164" y="76" width="332" height="140" rx="8" fill="#10291b"/><text x="26" y="235" font-family="Consolas" font-size="16" fill="#73f5a7">Retro Terminal</text></g>
+  </g>
+  <text x="600" y="622" text-anchor="middle" font-family="Segoe UI, sans-serif" font-size="23" font-weight="600" fill="#e7edf2">Theme gallery placeholder</text>
+</svg>

@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="675" viewBox="0 0 1200 675" role="img" aria-labelledby="title desc">
+  <title id="title">DraftLedger AI writing screenshot placeholder</title>
+  <desc id="desc">Placeholder showing where the AI writing screenshot belongs.</desc>
+  <rect width="1200" height="675" rx="24" fill="#101820"/>
+  <rect x="88" y="50" width="1024" height="575" rx="18" fill="#1e2b37" stroke="#45677f" stroke-width="2"/>
+  <rect x="88" y="50" width="1024" height="58" rx="18" fill="#27465f"/>
+  <text x="122" y="86" font-family="Segoe UI" font-size="22" font-weight="600" fill="#eef6fb">AI writing</text>
+  <g fill="#18232d" stroke="#45677f">
+    <rect x="122" y="136" width="300" height="46" rx="8"/>
+    <rect x="438" y="136" width="300" height="46" rx="8"/>
+    <rect x="754" y="136" width="324" height="46" rx="8"/>
+    <rect x="122" y="214" width="956" height="128" rx="10"/>
+    <rect x="122" y="371" width="956" height="170" rx="10"/>
+  </g>
+  <g fill="#95aabd" font-family="Segoe UI" font-size="15">
+    <text x="138" y="164">Connection preset</text>
+    <text x="454" y="164">Search models</text>
+    <text x="770" y="164">Generation preset</text>
+    <text x="138" y="240">Prompt</text>
+    <text x="138" y="397">Editable generated output</text>
+  </g>
+  <rect x="774" y="559" width="140" height="42" rx="8" fill="#356b8c"/>
+  <rect x="928" y="559" width="150" height="42" rx="8" fill="#5e7f5d"/>
+  <text x="844" y="586" text-anchor="middle" font-family="Segoe UI" font-size="15" fill="#fff">Generate</text>
+  <text x="1003" y="586" text-anchor="middle" font-family="Segoe UI" font-size="15" fill="#fff">Append</text>
+  <text x="600" y="654" text-anchor="middle" font-family="Segoe UI" font-size="18" fill="#b7c9d6">Replace with a screenshot using anonymized provider and manuscript data</text>
+</svg>
