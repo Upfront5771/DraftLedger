@@ -1,8 +1,8 @@
 # DraftLedger user guide
 
-## Updating to 0.3.0
+## Updating to 0.3.2
 
-Close DraftLedger, extract the updated release, and replace the previous `DraftLedger.exe`. Your project folders and settings do not need migration. Version 0.3.0 adds optional long-story memory, local retrieval of relevant earlier passages, reviewed story-bible updates, chapter summaries, plot-thread tracking, continuity warnings, a resizable collapsible right pane, and API-assisted story synopsis generation.
+Close DraftLedger, extract the updated release, and replace the previous `DraftLedger.exe`. Your project folders and settings do not need migration. Version 0.3.2 adds a full-size AI writing workspace beside Editor and Preview, inline API preset editing, inline Story Details and Settings, true full-width focus mode, more themes and fonts, and a sharper in-application logo. It retains the optional long-story memory introduced in 0.3.0.
 
 ## First launch
 
@@ -49,9 +49,9 @@ Removing an item takes it out of the manuscript and word totals. Its text file r
 
 ## Edit and count
 
-Type directly, paste, or import `.txt` / `.md` files into the **Editor** tab. Switch to **Read** to see the current section with Markdown formatting. The Read tab is read-only; switch back to Editor to change your text. Both modes use native Windows controls and work offline.
+Type directly, paste, or import `.txt` / `.md` files into the **Editor** tab. Switch to **Preview** to see the current section with Markdown formatting. Preview is read-only; switch back to Editor to change your text. Both modes use native Windows controls and work offline.
 
-| Type in Editor | Appearance in Read |
+| Type in Editor | Appearance in Preview |
 | --- | --- |
 | `*quiet thought*` | *quiet thought* |
 | `**important line**` | **important line** |
@@ -65,7 +65,7 @@ Type directly, paste, or import `.txt` / `.md` files into the **Editor** tab. Sw
 
 Use blank lines to separate paragraphs. A single line break normally wraps into the same paragraph; two trailing spaces before a newline create an explicit line break. Unmatched asterisks remain visible until completed. Emphasis does not cross blank paragraph breaks.
 
-The preview refreshes when you open Read, change sections, import/restore text, or apply font/theme settings. Switching tabs preserves the Editor text, caret, and undo history. The normal autosave timer continues to save the source Markdown. Select and copy text in either tab; selection word counts use the active view. **Find** and **Ctrl+F / Ctrl+H** switch to Editor for searching and replacing.
+The preview refreshes when you open Preview, change sections, import/restore text, or apply font/theme settings. Switching tabs preserves the Editor text, caret, and undo history. The normal autosave timer continues to save the source Markdown. Select and copy text in either tab; selection word counts use the active view. **Find** and **Ctrl+F / Ctrl+H** switch to Editor for searching and replacing.
 
 Links display their labels. Images show an alt-text placeholder. HTML is displayed literally. The preview does not load online content. Exports and whole-section statistics continue to use the original Markdown source.
 
@@ -87,7 +87,7 @@ Word rules:
 - Standalone punctuation does not count.
 - You can change hyphen and number handling in Settings.
 - Unicode letters and combining accents are supported. CJK text is counted as contiguous tokens, not language-specific dictionary segmentation.
-- Whole-section/chapter/story statistics count Markdown source text. The Read tab interprets supported formatting for display, but words in links, code, and other source constructs still count in manuscript totals.
+- Whole-section/chapter/story statistics count Markdown source text. Preview interprets supported formatting for display, but words in links, code, and other source constructs still count in manuscript totals.
 - Characters include spaces and line endings; the second character count excludes all whitespace. These are UTF-16 code units, so some emoji occupy more than one character unit.
 - Blank lines separate paragraphs. Sentence splitting is a punctuation-based estimate, with no abbreviation model.
 - Page, reading, and speaking estimates use 250 words/page, 250 words/minute, and 130 words/minute.
@@ -96,9 +96,9 @@ The session counter measures net word changes made in the editor since opening t
 
 ## AI writing
 
-Open a story section and expand **AI WRITING** in the right pane. DraftLedger opens a separate writing window tied to that section. Enter a prompt, choose the connection, model, preset, context, streaming, and thinking setting, then select **Generate**. The reply remains editable in the generated manuscript preview. Review or revise it, then choose **Append to section** to add it after a blank line and save it, or choose **Clear output** to remove it from the preview. The current section is snapshotted only when you append.
+Open a story section and choose the main **AI Writing** tab. Its full-size workspace has **Input**, **Output**, **Lorebooks**, and **Context / Request** tabs. Input and Output use the same font, sizing, undo support, and spell checking as the manuscript editor. Choose **API Connections** in the right pane to manage connections, models, and presets. Generated text remains editable and separate from the manuscript until you choose **Append to section**. Choose **Clear output** to discard the visible result without changing the manuscript. The target section is snapshotted only when you append.
 
-The AI window is optional. It makes no request until you choose **Refresh models** or **Generate**. **Build request preview** assembles the JSON locally and shows the destination, messages, context size, matched lore, and import notes. Credentials are excluded from the preview.
+AI features are optional. DraftLedger makes no request until you choose **Refresh models** or **Generate**. **Build request preview** assembles the JSON locally and shows the destination, messages, context size, matched lore, and import notes. Credentials are excluded from the preview.
 
 ### Connections and model lists
 
@@ -117,11 +117,11 @@ Choose **Refresh models** to read the selected endpoint's OpenAI-compatible mode
 
 Keys are saved only when entered. Leaving the key field blank keeps the existing encrypted key; **Remove saved key** deletes it. Changing an endpoint requires entering the new endpoint's key or removing the old one. Windows encryption ties a saved key to the current user profile and endpoint, so moving `ai-settings.json` to another account or changing the endpoint requires re-entering it.
 
-DraftLedger identifies itself as `DraftLedger/0.3.0`; it does not impersonate a browser. It permits one active AI request, disables repeated Generate actions while running, blocks HTTP redirects so credentials cannot be forwarded, honors a provider's 429 cooldown across restarts, and never automatically retries a failed request. These measures reduce accidental request bursts, but only the provider can determine account access or enforcement.
+DraftLedger identifies itself as `DraftLedger/0.3.2`; it does not impersonate a browser. It permits one active AI request, disables repeated Generate actions while running, blocks HTTP redirects so credentials cannot be forwarded, honors a provider's 429 cooldown across restarts, and never automatically retries a failed request. These measures reduce accidental request bursts, but only the provider can determine account access or enforcement.
 
 ### Presets, thinking, and streaming
 
-A model preset stores its connection, exact model ID, system instruction, output limit, sampling values, stop sequences, context and lore budgets, stream setting, and thinking behavior. **New** copies the current preset. **Edit** exposes the full set of supported fields. **Save** retains the choices currently visible in the AI window.
+A model preset stores its connection, exact model ID, system instruction, output limit, sampling values, stop sequences, context and lore budgets, stream setting, and thinking behavior. **New** copies the current preset. All preset fields are visible inline in the API Connections window, and **Save preset** retains them without opening another dialog.
 
 **Thinking: Default** omits a reasoning setting. **Off**, **Low**, **Medium**, and **High** send the selected setting using the preset's thinking protocol. Auto uses OpenRouter's reasoning object for OpenRouter and `reasoning_effort` for other providers. `TemplateEnableThinking` is available for compatible local chat templates. Thinking controls vary by provider/model. DraftLedger blocks Off when model metadata says reasoning is mandatory, and it reports rejected parameters without retrying. Reasoning fields and `<think>` or `<analysis>` blocks are excluded from appended text.
 
@@ -189,8 +189,8 @@ Word, RTF, PDF, and EPUB are not supported in this version. For later formatting
 
 ## Appearance
 
-Settings include seven themes: **System**, **Pen & Paper**, **Muted Sage**, **Retro Terminal**, **Midnight Ink**, **Charcoal**, and **Deep Navy**. System follows the Windows light/dark choice when DraftLedger starts or settings are applied. Pen & Paper and Muted Sage are light themes. Retro Terminal, Midnight Ink, Charcoal, and Deep Navy are dark themes.
+Settings include eleven themes: **System**, **Pen & Paper**, **Warm Sepia**, **Muted Sage**, **Ocean Mist**, **Retro Terminal**, **Midnight Ink**, **Charcoal**, **Deep Navy**, **Forest Night**, and **Plum Noir**. System follows the Windows light/dark choice when DraftLedger starts or settings are applied.
 
-Each theme controls the canvas, manuscript paper, side panels, tab headers, buttons, form fields, dropdown menus, progress bars, text selection, and both focused and unfocused outline selections. Chapter and section names remain readable when keyboard focus moves to the editor or another control. Selected tabs emphasize only their header, so manuscript and settings content retain their intended weight. Editor and Read body text use normal weight with relaxed line spacing. Settings also include editor font and size, spell checking, language, counting rules, goals, snapshot interval/retention, and storage location. Spell checking depends on the spelling resources available in Windows. Installing additional language resources is a Windows task.
+Each theme controls the canvas, manuscript paper, side panels, tab headers, buttons, form fields, dropdown menus, progress bars, text selection, and both focused and unfocused outline selections. Chapter and section names remain readable when keyboard focus moves to the editor or another control. Selected tabs emphasize only their header, so manuscript and settings content retain their intended weight. Editor and Preview body text use normal weight with relaxed line spacing. Settings also include editor font and size, spell checking, language, counting rules, goals, snapshot interval/retention, and storage location. Spell checking depends on the spelling resources available in Windows. Installing additional language resources is a Windows task.
 
-Focus mode hides the outline, statistics panel, and count status, and maximizes the window. The title bar and editing controls remain available.
+Focus mode hides the outline, details panel, splitter, and count status, and lets the active AI Writing, Editor, or Preview page fill the entire maximized workspace. The title bar and editing controls remain available.

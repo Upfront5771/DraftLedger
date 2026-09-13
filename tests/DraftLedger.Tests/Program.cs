@@ -30,8 +30,11 @@ try
         Check((string?)editor.Attribute("FontWeight") == "Normal" && editor.Attributes().Any(a => a.Name.LocalName.EndsWith("LineHeight", StringComparison.Ordinal) && a.Value == "29"), "editor manuscript text has explicit normal weight and relaxed line spacing");
         Check(document.Descendants().Any(e => e.Name.LocalName == "GridSplitter" && (string?)e.Attribute("ResizeDirection") == "Columns"), "workspace has a resizable details pane");
         var expanderHeaders = document.Descendants().Where(e => e.Name.LocalName == "Expander").Select(e => (string?)e.Attribute("Header")).ToHashSet();
-        Check(new[] { "AT A GLANCE", "SCENE PURPOSE / NOTES", "MEMORY & CONTINUITY", "AI WRITING", "SETTINGS", "FILES & RECOVERY" }.All(expanderHeaders.Contains), "details-pane tools are collapsible and include memory controls");
+        Check(new[] { "AT A GLANCE", "SCENE PURPOSE / NOTES", "MEMORY & CONTINUITY", "API CONNECTIONS", "STORY DETAILS", "SETTINGS", "FILES & RECOVERY" }.All(expanderHeaders.Contains), "details-pane tools are inline and collapsible");
         Check(document.Descendants().Any(e => e.Name.LocalName == "CheckBox" && (string?)e.Attribute("Content") == "Enable long-story memory"), "long-story memory has an explicit per-story opt-in");
+        var writingTabs = document.Descendants().Where(e => e.Name.LocalName == "TabItem").Select(e => (string?)e.Attribute("Header")).ToHashSet();
+        Check(new[] { "AI Writing", "Editor", "Preview" }.All(writingTabs.Contains), "main writing area has AI Writing, Editor, and Preview tabs");
+        Check(document.Descendants().Any(e => e.Name.LocalName == "Image" && (string?)e.Attribute("Source") == "Assets/DraftLedger-256.png"), "application header uses the high-resolution logo asset");
     }
     using (var xaml = typeof(Program).Assembly.GetManifestResourceStream("AppStyles.xaml")!)
     {
@@ -56,6 +59,11 @@ try
         Check((string?)response.Attribute("IsReadOnly") == "False", "generated output is editable before append");
         var model = document.Descendants().Single(e => e.Name.LocalName == "ComboBox" && e.Attributes().Any(a => a.Name.LocalName == "Name" && a.Value == "ModelSelector"));
         Check((string?)model.Attribute("IsTextSearchEnabled") == "False" && model.Attributes().Any(a => a.Name.LocalName == "KeyUp" && a.Value == "ModelFilter_KeyUp"), "model selector uses substring filtering");
+        var aiTabs = document.Descendants().Where(e => e.Name.LocalName == "TabItem").Select(e => (string?)e.Attribute("Header")).ToHashSet();
+        Check(new[] { "Input", "Output", "Lorebooks", "Context / Request" }.All(aiTabs.Contains), "AI writing workspace keeps input, output, lorebooks, and request preview tabs");
+        var prompt = document.Descendants().Single(e => e.Name.LocalName == "TextBox" && e.Attributes().Any(a => a.Name.LocalName == "Name" && a.Value == "PromptBox"));
+        Check((string?)prompt.Attribute("SpellCheck.IsEnabled") == "True", "AI input editor enables spell checking");
+        Check(document.Descendants().Any(e => e.Name.LocalName == "TextBox" && e.Attributes().Any(a => a.Name.LocalName == "Name" && a.Value == "PresetNameBox")) && !document.Descendants().Any(e => e.Name.LocalName == "Button" && (string?)e.Attribute("Content") == "Edit preset"), "preset settings are edited inline without a second popup");
     }
     using (var xaml = typeof(Program).Assembly.GetManifestResourceStream("MemoryWindow.xaml")!)
     {
@@ -73,6 +81,24 @@ try
     {
         Span<byte> header = stackalloc byte[6]; icon.ReadExactly(header);
         Check(header[0] == 0 && header[1] == 0 && header[2] == 1 && header[3] == 0 && BitConverter.ToUInt16(header[4..]) >= 8, "application icon contains a multi-size Windows icon directory");
+    }
+    using (var png = typeof(Program).Assembly.GetManifestResourceStream("DraftLedger-256.png")!)
+    {
+        Span<byte> header = stackalloc byte[24]; png.ReadExactly(header);
+        int width = IPAddress.NetworkToHostOrder(BitConverter.ToInt32(header[16..20]));
+        int height = IPAddress.NetworkToHostOrder(BitConverter.ToInt32(header[20..24]));
+        Check(width >= 256 && height >= 256, "in-application logo is at least 256 pixels");
+    }
+    using (var source = new StreamReader(typeof(Program).Assembly.GetManifestResourceStream("MainWindow.xaml.cs")!))
+    {
+        string text = source.ReadToEnd();
+        Check(text.Contains("DetailsSplitterColumn.Width = new(focusMode ? 0 : 6)") && text.Contains("DetailsColumn.MinWidth = focusMode ? 0 : 280"), "focus mode removes both side panes and their reserved column space");
+        Check(new[] { "Aptos", "Cascadia Mono", "Garamond", "Palatino Linotype", "Trebuchet MS", "Verdana" }.All(text.Contains), "settings offer an expanded editor font list");
+    }
+    using (var source = new StreamReader(typeof(Program).Assembly.GetManifestResourceStream("ThemeCatalog.cs")!))
+    {
+        string text = source.ReadToEnd();
+        Check(new[] { "Warm Sepia", "Ocean Mist", "Forest Night", "Plum Noir" }.All(text.Contains), "theme catalog includes four additional palettes");
     }
     var italics = ReadRuns("A *quiet moment* in the story.");
     Check(string.Concat(italics.Select(r => r.Text)) == "A quiet moment in the story." && italics.Single(r => r.Text == "quiet moment").Italic, "asterisks render italics without visible delimiters");
@@ -187,6 +213,7 @@ try
     Check(!Directory.Exists(memoryStore.Folder(memoryStory)) && Directory.Exists(recoveredMemory), "memory deletion moves files to recovery instead of destroying them");
 
     var localApi = new ApiConnection { Kind = ApiKind.LMStudio, BaseUrl = "http://localhost:1234/v1" };
+    Check(new ApiConnection { Name = "My local model" }.ToString() == "My local model" && new ModelPreset { Name = "Novel prose" }.ToString() == "Novel prose", "connection and preset selectors display friendly saved names");
     Check(ApiEndpoint.Normalize(localApi).AbsoluteUri == "http://localhost:1234/v1/", "localhost model servers may use HTTP");
     Throws<InvalidDataException>(() => ApiEndpoint.Normalize(new() { BaseUrl = "http://example.com/v1" }), "public API connections require HTTPS");
     Throws<InvalidDataException>(() => ApiEndpoint.Normalize(new() { BaseUrl = "http://192.168.1.5/v1" }), "private LAN HTTP requires explicit opt-in");
@@ -235,7 +262,7 @@ try
     {
         var models = await api.ModelsAsync(new() { Kind = ApiKind.OpenRouter, BaseUrl = "https://openrouter.ai/api/v1" }, "secret-key", CancellationToken.None);
         Check(modelCalls == 1 && modelUri?.AbsoluteUri == "https://openrouter.ai/api/v1/models" && authScheme == "Bearer" && authValue == "secret-key", "model discovery uses the selected API base and bearer key once");
-        Check(userAgent == "DraftLedger/0.3.0" && referrer is null && appTitle == "DraftLedger", "API client identifies DraftLedger without browser impersonation");
+        Check(userAgent == "DraftLedger/0.3.2" && referrer is null && appTitle == "DraftLedger", "API client identifies DraftLedger without browser impersonation");
         Check(models.Single() is { Id: "writer/a", ContextLength: 32000, ReasoningMandatory: false } && models[0].ReasoningEfforts!.SequenceEqual(["low", "high"]), "model discovery retains capability metadata");
     }
     string streamed = "";

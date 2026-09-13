@@ -5,6 +5,8 @@ using System.Text;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Markup;
+using System.Windows.Media;
 using DraftLedger.Core;
 using Microsoft.Win32;
 
@@ -13,13 +15,13 @@ namespace DraftLedger.App;
 public partial class AiWritingWindow : Window
 {
     private readonly AiSettingsFile settingsFile;
-    private readonly AiSettings settings;
+    private AiSettings settings;
     private readonly Func<WritingContext> getContext;
-    private readonly Func<string, bool> append;
+    private readonly Func<Guid, string, bool> append;
     private readonly string recoveryFolder;
     private readonly Story story;
-    private readonly Chapter chapter;
-    private readonly Section section;
+    private Chapter chapter;
+    private Section section;
     private readonly ProjectStore projectStore;
     private readonly StoryMemoryStore memoryStore = new();
     private readonly ChatApiClient client = new();
@@ -31,6 +33,7 @@ public partial class AiWritingWindow : Window
     private DateTimeOffset lastCheckpoint;
     private List<LoreChoice> loreChoices = [];
     private List<ApiModel> allModels = [];
+    private Guid outputSectionId;
     private sealed class LoreChoice
     {
         public required Lorebook Book { get; init; }
@@ -39,13 +42,13 @@ public partial class AiWritingWindow : Window
     }
     private ApiConnection? Connection => ConnectionSelector.SelectedItem as ApiConnection;
 
-    public AiWritingWindow(string path, Func<WritingContext> getContext, Func<string, bool> append, string recoveryFolder, Story story, Chapter chapter, Section section, ProjectStore projectStore)
+    public AiWritingWindow(string path, Func<WritingContext> getContext, Func<Guid, string, bool> append, string recoveryFolder, Story story, Chapter chapter, Section section, ProjectStore projectStore)
     {
         this.getContext = getContext; this.append = append; this.recoveryFolder = recoveryFolder; this.story = story; this.chapter = chapter; this.section = section; this.projectStore = projectStore;
         settingsFile = new(path); settings = settingsFile.Load();
-        InitializeComponent(); Height = Math.Min(930, SystemParameters.WorkArea.Height - 40);
+        InitializeComponent(); Height = Math.Min(860, SystemParameters.WorkArea.Height - 40); outputSectionId = section.Id;
         var context = getContext(); TargetLabel.Text = $"Append to: {context.StoryTitle} / {context.ChapterTitle} / {context.SectionTitle}";
-        ThinkingSelector.ItemsSource = Enum.GetValues<ThinkingMode>(); ContextSelector.ItemsSource = Enum.GetValues<ContextScope>();
+        ThinkingSelector.ItemsSource = Enum.GetValues<ThinkingMode>(); ContextSelector.ItemsSource = Enum.GetValues<ContextScope>(); PresetThinkingSelector.ItemsSource = Enum.GetValues<ThinkingMode>(); PresetContextSelector.ItemsSource = Enum.GetValues<ContextScope>(); ThinkingProtocolSelector.ItemsSource = Enum.GetValues<ThinkingProtocol>();
         ConnectionSelector.ItemsSource = settings.Connections;
         ConnectionSelector.SelectedItem = settings.Connections.FirstOrDefault(c => c.Id == settings.LastConnection) ?? settings.Connections.FirstOrDefault();
         PresetSelector.ItemsSource = settings.Presets;
@@ -54,6 +57,16 @@ public partial class AiWritingWindow : Window
         LoadPreset((ModelPreset)PresetSelector.SelectedItem); RefreshLore(); loading = false; UpdateModelInfo();
     }
 
+    private Window DialogOwner => Owner ?? Application.Current.MainWindow;
+    public FrameworkElement DetachWritingSurface(string font, double fontSize, bool spellCheck, string language) { ConfigurationPanel.Visibility = Visibility.Collapsed; PresetSettingsScroll.Visibility = Visibility.Collapsed; WritingHeader.Visibility = Visibility.Visible; AiTabs.Visibility = Visibility.Visible; RootPanel.Margin = new Thickness(0); ApplyEditorAppearance(font, fontSize, spellCheck, language); UpdateWritingSummary(); var surface = (FrameworkElement)Content; Content = null; return surface; }
+    public void SetTarget(Chapter nextChapter, Section nextSection) { chapter = nextChapter; section = nextSection; if (ResponseBox.Text.Length == 0) outputSectionId = nextSection.Id; UpdateWritingSummary(); }
+    public void ReloadConfiguration() { string promptText = PromptBox.Text; settings = settingsFile.Load(); loading = true; ConnectionSelector.ItemsSource = settings.Connections; ConnectionSelector.SelectedItem = settings.Connections.FirstOrDefault(c => c.Id == settings.LastConnection) ?? settings.Connections.FirstOrDefault(); PresetSelector.ItemsSource = settings.Presets; var selected = settings.Presets.FirstOrDefault(p => p.Id == settings.LastPreset) ?? settings.Presets.FirstOrDefault() ?? new ModelPreset(); if (settings.Presets.Count == 0) settings.Presets.Add(selected); PresetSelector.SelectedItem = selected; PromptBox.Text = promptText; LoadPreset(selected); RefreshLore(); loading = false; UpdateModelInfo(); UpdateWritingSummary(); }
+    public void ApplyEditorAppearance(string font, double fontSize, bool spellCheck, string language) { var family = new FontFamily(font); PromptBox.FontFamily = ResponseBox.FontFamily = family; PromptBox.FontSize = ResponseBox.FontSize = fontSize; SpellCheck.SetIsEnabled(PromptBox, spellCheck); SpellCheck.SetIsEnabled(ResponseBox, spellCheck); PromptBox.Language = ResponseBox.Language = XmlLanguage.GetLanguage(language); }
+    public void FocusInput() { InputTab.IsSelected = true; PromptBox.Focus(); }
+    public void SaveState() => SaveConfiguration();
+    private void UpdateWritingSummary() { if (WritingConfigurationSummary is not null) WritingConfigurationSummary.Text = $"{Connection?.Name ?? "No connection"} · {preset?.Name ?? "No preset"}\nTarget: {story.Title} / {chapter.Title} / {section.Title}"; }
+    public bool TryShutdown() { if (busy) { cancellation?.Cancel(); return false; } SaveRecovery(); SaveConfiguration(); client.Dispose(); return true; }
+
     private void Report(Exception ex) => AiStatus.Text = ex switch
     {
         OperationCanceledException => cancellation?.IsCancellationRequested == true ? "Stopped. Any partial text is retained for review." : "The request timed out. Partial text is retained; no automatic retry was sent.",
@@ -61,7 +74,7 @@ public partial class AiWritingWindow : Window
         _ => ex.Message
     };
     private void Guard(Action action) { try { action(); } catch (Exception ex) { Report(ex); } }
-    private bool Confirm(string message) => MessageBox.Show(this, message, "AI writing", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes;
+    private bool Confirm(string message) => MessageBox.Show(DialogOwner, message, "AI writing", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes;
     private static T Copy<T>(T value) => JsonSerializer.Deserialize<T>(JsonSerializer.Serialize(value, ProjectStore.Json), ProjectStore.Json)!;
     private string ModelId => ModelSelector.SelectedItem is ApiModel model ? model.Id : ModelSelector.Text.Trim();
     private void CapturePreset()
@@ -87,6 +100,8 @@ public partial class AiWritingWindow : Window
         ModelSelector.SelectedItem = Connection?.Models.FirstOrDefault(m => m.Id == value.Model);
         ModelSelector.Text = value.Model;
         StreamToggle.IsChecked = value.Stream; ThinkingSelector.SelectedItem = value.Thinking; ContextSelector.SelectedItem = value.Context;
+        PresetStreamToggle.IsChecked = value.Stream; PresetThinkingSelector.SelectedItem = value.Thinking; PresetContextSelector.SelectedItem = value.Context; PresetNameBox.Text = value.Name; SystemPromptBox.Text = value.SystemPrompt; MaxTokensBox.Text = value.MaxTokens.ToString(CultureInfo.InvariantCulture); CompletionTokenLimitToggle.IsChecked = value.UseCompletionTokenLimit;
+        TemperatureBox.Text = Number(value.Temperature); TopPBox.Text = Number(value.TopP); FrequencyPenaltyBox.Text = Number(value.FrequencyPenalty); PresencePenaltyBox.Text = Number(value.PresencePenalty); ThinkingProtocolSelector.SelectedItem = value.ThinkingProtocol; ContextCharactersBox.Text = value.ContextCharacters.ToString(CultureInfo.InvariantCulture); LoreCharactersBox.Text = value.LoreCharacters.ToString(CultureInfo.InvariantCulture); StopSequencesBox.Text = JsonSerializer.Serialize(value.Stop); ExtraSamplingBox.Text = JsonSerializer.Serialize(value.ExtraSampling); CharacterNameBox.Text = value.CharacterName; UserNameBox.Text = value.UserName; CharacterDescriptionBox.Text = value.CharacterDescription; CharacterPersonalityBox.Text = value.CharacterPersonality; PersonaBox.Text = value.Persona; ImportedPromptsBox.Text = JsonSerializer.Serialize(value.ImportedPrompts, ProjectStore.Json);
         loading = previous; UpdateModelInfo();
     }
     private void ReloadPresets(ModelPreset value)
@@ -127,12 +142,12 @@ public partial class AiWritingWindow : Window
         if (ModelInfo is null) return;
         var model = Connection?.Models.FirstOrDefault(m => m.Id == ModelId);
         ModelInfo.Text = model is null ? "Select a fetched model or type its exact ID. Availability is checked by the provider." : model.Name + (model.ContextLength.HasValue ? $" · context {model.ContextLength:N0} tokens" : "") + (model.ReasoningMandatory == true ? " · thinking is mandatory" : "");
-        DestinationInfo.Text = Connection is null ? "Add an OpenRouter, LM Studio, OpenAI, or custom API connection." : $"Destination: {Connection.BaseUrl}\nOnly the selected context and enabled matching lore are sent when you generate. Remote APIs may charge for requests. Thinking Off works only if the model and selected protocol support it.";
+        DestinationInfo.Text = Connection is null ? "Add an OpenRouter, LM Studio, OpenAI, or custom API connection." : $"Destination: {Connection.BaseUrl}\nEdit the selected preset directly below, then choose Save preset."; UpdateWritingSummary();
     }
 
     private void AddConnection_Click(object sender, RoutedEventArgs e) => Guard(() =>
     {
-        var type = Dialogs.Form(this, "Connection type", [new("Provider", "LMStudio", Enum.GetNames<ApiKind>())]); if (type is null) return;
+        var type = Dialogs.Form(DialogOwner, "Connection type", [new("Provider", "LMStudio", Enum.GetNames<ApiKind>())]); if (type is null) return;
         var kind = Enum.Parse<ApiKind>(type["Provider"]);
         EditConnection(new ApiConnection { Kind = kind, Name = kind == ApiKind.LMStudio ? "LM Studio (local)" : kind.ToString(), BaseUrl = kind switch { ApiKind.LMStudio => "http://localhost:1234/v1", ApiKind.OpenAI => "https://api.openai.com/v1", ApiKind.OpenRouter => "https://openrouter.ai/api/v1", _ => "https://your-provider.example/v1" } }, true);
     });
@@ -140,7 +155,7 @@ public partial class AiWritingWindow : Window
     private void EditConnection(ApiConnection original, bool create)
     {
         var value = Copy(original);
-        var fields = Dialogs.Form(this, "API connection", [new("Name", value.Name), new("API base URL", value.BaseUrl), new("API key (blank keeps saved key)", "", Secret: true), new("Remove saved key", "No", ["No", "Yes"]), new("Allow unencrypted HTTP on private LAN IP", value.AllowPrivateHttp ? "Yes" : "No", ["No", "Yes"]), new("Timeout in seconds", value.TimeoutSeconds.ToString())], v =>
+        var fields = Dialogs.Form(DialogOwner, "API connection", [new("Name", value.Name), new("API base URL", value.BaseUrl), new("API key (blank keeps saved key)", "", Secret: true), new("Remove saved key", "No", ["No", "Yes"]), new("Allow unencrypted HTTP on private LAN IP", value.AllowPrivateHttp ? "Yes" : "No", ["No", "Yes"]), new("Timeout in seconds", value.TimeoutSeconds.ToString())], v =>
         {
             try
             {
@@ -187,11 +202,11 @@ public partial class AiWritingWindow : Window
 
     private void NewPreset_Click(object sender, RoutedEventArgs e) => Guard(() =>
     {
-        CapturePreset(); var name = Dialogs.Name(this, "New model preset", "Writing preset"); if (name is null) return;
+        CapturePreset(); var name = Dialogs.Name(DialogOwner, "New model preset", "Writing preset"); if (name is null) return;
         var created = preset is null ? new ModelPreset() : Copy(preset); created.Id = Guid.NewGuid(); created.Name = name;
         settings.Presets.Add(created); ReloadPresets(created);
     });
-    private void SavePreset_Click(object sender, RoutedEventArgs e) => Guard(() => { CapturePreset(); if (preset is not null) ChatPreparation.ValidatePreset(preset); SaveConfiguration(); AiStatus.Text = "Model preset saved."; });
+    private void SavePreset_Click(object sender, RoutedEventArgs e) => Guard(() => { CapturePreset(); if (preset is null) return; CaptureInlinePreset(preset); ChatPreparation.ValidatePreset(preset); ReloadPresets(preset); AiStatus.Text = "Model preset saved."; });
     private void DeletePreset_Click(object sender, RoutedEventArgs e) => Guard(() =>
     {
         if (preset is null || !Confirm($"Delete preset '{preset.Name}'?")) return;
@@ -199,27 +214,15 @@ public partial class AiWritingWindow : Window
     });
     private static string Number(double? value) => value?.ToString(CultureInfo.InvariantCulture) ?? "";
     private static double? OptionalNumber(string value) => string.IsNullOrWhiteSpace(value) ? null : double.Parse(value, CultureInfo.InvariantCulture);
-    private void EditPreset_Click(object sender, RoutedEventArgs e) => Guard(() =>
+    private void CaptureInlinePreset(ModelPreset value)
     {
-        CapturePreset(); if (preset is null) return; var edited = Copy(preset);
-        var values = Dialogs.Form(this, "Preset settings (blank sampling = provider default)", [new("Name", edited.Name), new("System instruction (additional to imported prompts)", edited.SystemPrompt, Multiline: true), new("Max output tokens", edited.MaxTokens.ToString()), new("Use max_completion_tokens", edited.UseCompletionTokenLimit ? "Yes" : "No", ["No", "Yes"]), new("Temperature", Number(edited.Temperature)), new("Top P", Number(edited.TopP)), new("Frequency penalty", Number(edited.FrequencyPenalty)), new("Presence penalty", Number(edited.PresencePenalty)), new("Thinking protocol", edited.ThinkingProtocol.ToString(), Enum.GetNames<ThinkingProtocol>()), new("Context character limit", edited.ContextCharacters.ToString()), new("Lore character budget", edited.LoreCharacters.ToString()), new("Stop sequences (JSON array)", JsonSerializer.Serialize(edited.Stop), Multiline: true), new("Extra sampling (JSON object)", JsonSerializer.Serialize(edited.ExtraSampling), Multiline: true), new("Character name", edited.CharacterName), new("User name", edited.UserName), new("Character description", edited.CharacterDescription, Multiline: true), new("Character personality", edited.CharacterPersonality, Multiline: true), new("User persona", edited.Persona, Multiline: true), new("Imported prompt blocks (JSON array)", JsonSerializer.Serialize(edited.ImportedPrompts, ProjectStore.Json), Multiline: true)], v =>
-        {
-            try
-            {
-                edited.Name = v["Name"].Trim(); edited.SystemPrompt = v["System instruction (additional to imported prompts)"];
-                edited.MaxTokens = int.Parse(v["Max output tokens"]); edited.UseCompletionTokenLimit = v["Use max_completion_tokens"] == "Yes";
-                edited.Temperature = OptionalNumber(v["Temperature"]); edited.TopP = OptionalNumber(v["Top P"]); edited.FrequencyPenalty = OptionalNumber(v["Frequency penalty"]); edited.PresencePenalty = OptionalNumber(v["Presence penalty"]);
-                edited.ThinkingProtocol = Enum.Parse<ThinkingProtocol>(v["Thinking protocol"]); edited.ContextCharacters = int.Parse(v["Context character limit"]); edited.LoreCharacters = int.Parse(v["Lore character budget"]);
-                edited.Stop = JsonSerializer.Deserialize<List<string>>(v["Stop sequences (JSON array)"]) ?? []; edited.ExtraSampling = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(v["Extra sampling (JSON object)"]) ?? [];
-                edited.CharacterName = v["Character name"]; edited.UserName = v["User name"]; edited.CharacterDescription = v["Character description"]; edited.CharacterPersonality = v["Character personality"]; edited.Persona = v["User persona"];
-                edited.ImportedPrompts = JsonSerializer.Deserialize<List<PromptTemplate>>(v["Imported prompt blocks (JSON array)"], ProjectStore.Json) ?? [];
-                ChatPreparation.ValidatePreset(edited); return null;
-            }
-            catch (Exception ex) { return "Check the preset fields: " + ex.Message; }
-        });
-        if (values is null) return;
-        settings.Presets[settings.Presets.IndexOf(preset)] = edited; ReloadPresets(edited); AiStatus.Text = "Preset settings saved.";
-    });
+        if (string.IsNullOrWhiteSpace(PresetNameBox.Text)) throw new InvalidDataException("Enter a preset name.");
+        value.Name = PresetNameBox.Text.Trim(); value.SystemPrompt = SystemPromptBox.Text; value.MaxTokens = int.Parse(MaxTokensBox.Text, CultureInfo.InvariantCulture); value.UseCompletionTokenLimit = CompletionTokenLimitToggle.IsChecked == true;
+        value.Stream = PresetStreamToggle.IsChecked == true; value.Thinking = PresetThinkingSelector.SelectedItem is ThinkingMode thinking ? thinking : ThinkingMode.Default; value.Context = PresetContextSelector.SelectedItem is ContextScope scope ? scope : ContextScope.CurrentSection;
+        value.Temperature = OptionalNumber(TemperatureBox.Text); value.TopP = OptionalNumber(TopPBox.Text); value.FrequencyPenalty = OptionalNumber(FrequencyPenaltyBox.Text); value.PresencePenalty = OptionalNumber(PresencePenaltyBox.Text); value.ThinkingProtocol = ThinkingProtocolSelector.SelectedItem is ThinkingProtocol protocol ? protocol : ThinkingProtocol.Auto;
+        value.ContextCharacters = int.Parse(ContextCharactersBox.Text, CultureInfo.InvariantCulture); value.LoreCharacters = int.Parse(LoreCharactersBox.Text, CultureInfo.InvariantCulture); value.Stop = JsonSerializer.Deserialize<List<string>>(StopSequencesBox.Text) ?? []; value.ExtraSampling = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(ExtraSamplingBox.Text) ?? [];
+        value.CharacterName = CharacterNameBox.Text; value.UserName = UserNameBox.Text; value.CharacterDescription = CharacterDescriptionBox.Text; value.CharacterPersonality = CharacterPersonalityBox.Text; value.Persona = PersonaBox.Text; value.ImportedPrompts = JsonSerializer.Deserialize<List<PromptTemplate>>(ImportedPromptsBox.Text, ProjectStore.Json) ?? [];
+    }
     private static string ReadImport(string path)
     {
         if (new FileInfo(path).Length > 4_000_000) throw new InvalidDataException("Import files are limited to 4 MB.");
@@ -227,11 +230,11 @@ public partial class AiWritingWindow : Window
     }
     private void ImportPreset_Click(object sender, RoutedEventArgs e) => Guard(() =>
     {
-        var file = new OpenFileDialog { Filter = "SillyTavern chat completion preset|*.json" }; if (file.ShowDialog(this) != true) return;
+        var file = new OpenFileDialog { Filter = "SillyTavern chat completion preset|*.json" }; if (file.ShowDialog(DialogOwner) != true) return;
         var imported = SillyTavernImport.Preset(ReadImport(file.FileName), Path.GetFileNameWithoutExtension(file.FileName));
         ChatPreparation.ValidatePreset(imported.Value); imported.Value.ConnectionId = Connection?.Id;
         settings.Presets.Add(imported.Value); ReloadPresets(imported.Value);
-        MessageBox.Show(this, string.Join("\n\n", imported.Warnings), "Preset import report", MessageBoxButton.OK, MessageBoxImage.Information);
+        MessageBox.Show(DialogOwner, string.Join("\n\n", imported.Warnings), "Preset import report", MessageBoxButton.OK, MessageBoxImage.Information);
         AiStatus.Text = "Preset imported. Check the model, prompt variables, and request preview before generating.";
     });
 
@@ -243,17 +246,17 @@ public partial class AiWritingWindow : Window
     private void LoreEnabled_Click(object sender, RoutedEventArgs e) => Guard(SaveConfiguration);
     private void ImportLore_Click(object sender, RoutedEventArgs e) => Guard(() =>
     {
-        var file = new OpenFileDialog { Filter = "World Info / lorebook JSON|*.json" }; if (file.ShowDialog(this) != true) return;
+        var file = new OpenFileDialog { Filter = "World Info / lorebook JSON|*.json" }; if (file.ShowDialog(DialogOwner) != true) return;
         var imported = SillyTavernImport.Lorebook(ReadImport(file.FileName), Path.GetFileNameWithoutExtension(file.FileName)); settings.Lorebooks.Add(imported.Value);
         var active = settings.StoryLorebooks.GetValueOrDefault(getContext().StoryId, []); active.Add(imported.Value.Id); settings.StoryLorebooks[getContext().StoryId] = active;
-        RefreshLore(); SaveConfiguration(); MessageBox.Show(this, string.Join("\n\n", imported.Warnings), "Lorebook import report", MessageBoxButton.OK, MessageBoxImage.Information);
+        RefreshLore(); SaveConfiguration(); MessageBox.Show(DialogOwner, string.Join("\n\n", imported.Warnings), "Lorebook import report", MessageBoxButton.OK, MessageBoxImage.Information);
     });
     private void InspectLore_Click(object sender, RoutedEventArgs e) => Guard(() =>
     {
         if (LoreList.SelectedItem is not LoreChoice choice) return;
-        var entry = Dialogs.Select(this, choice.Book.Name, choice.Book.Entries, e => $"{(e.Enabled ? "Enabled" : "Disabled")} · {e.Name}", e => $"Keys: {string.Join(", ", e.Keys)}\nAlways active: {e.Constant}\n\n{e.Content}");
+        var entry = Dialogs.Select(DialogOwner, choice.Book.Name, choice.Book.Entries, e => $"{(e.Enabled ? "Enabled" : "Disabled")} · {e.Name}", e => $"Keys: {string.Join(", ", e.Keys)}\nAlways active: {e.Constant}\n\n{e.Content}");
         if (entry is null) return;
-        var fields = Dialogs.Form(this, "Lore entry", [new("Enabled", entry.Enabled ? "Yes" : "No", ["Yes", "No"]), new("Name", entry.Name), new("Content", entry.Content, Multiline: true), new("Primary keys (JSON array)", JsonSerializer.Serialize(entry.Keys), Multiline: true), new("Always active", entry.Constant ? "Yes" : "No", ["Yes", "No"])], v => { try { _ = JsonSerializer.Deserialize<List<string>>(v["Primary keys (JSON array)"]); return null; } catch { return "Enter a JSON array of keyword strings."; } });
+        var fields = Dialogs.Form(DialogOwner, "Lore entry", [new("Enabled", entry.Enabled ? "Yes" : "No", ["Yes", "No"]), new("Name", entry.Name), new("Content", entry.Content, Multiline: true), new("Primary keys (JSON array)", JsonSerializer.Serialize(entry.Keys), Multiline: true), new("Always active", entry.Constant ? "Yes" : "No", ["Yes", "No"])], v => { try { _ = JsonSerializer.Deserialize<List<string>>(v["Primary keys (JSON array)"]); return null; } catch { return "Enter a JSON array of keyword strings."; } });
         if (fields is null) return;
         entry.Enabled = fields["Enabled"] == "Yes"; entry.Name = fields["Name"]; entry.Content = fields["Content"]; entry.Keys = JsonSerializer.Deserialize<List<string>>(fields["Primary keys (JSON array)"]) ?? []; entry.Constant = fields["Always active"] == "Yes"; SaveConfiguration();
     });
@@ -308,6 +311,7 @@ public partial class AiWritingWindow : Window
             var request = Prepare(); string key = AiSettingsFile.Unprotect(request.Connection); SaveConfiguration();
             // Retain any previous unfinished response before replacing its preview.
             SaveRecovery(); response.Clear(); ResponseBox.Clear(); OutputInfo.Text = ""; appended = false;
+            outputSectionId = section.Id; OutputTab.IsSelected = true;
             recoveryPath = Path.Combine(recoveryFolder, $"ai-{DateTime.UtcNow:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}.md"); lastCheckpoint = DateTimeOffset.MinValue;
             SetBusy(true); AiStatus.Text = $"Generating with {request.Preset.Model}. {request.Prepared.Characters:N0} input characters; {request.Prepared.LoreNames.Count} lore entries.";
             var result = await client.GenerateAsync(request.Connection, key, request.Body, chunk =>
@@ -329,7 +333,7 @@ public partial class AiWritingWindow : Window
         if (busy || appended || string.IsNullOrWhiteSpace(ResponseBox.Text)) return;
         try
         {
-        SaveRecovery(); string approvedText = ResponseBox.Text; bool saved = append(approvedText); appended = true; AppendButton.IsEnabled = false;
+        SaveRecovery(); string approvedText = ResponseBox.Text; bool saved = append(outputSectionId, approvedText); appended = true; AppendButton.IsEnabled = false;
         AiStatus.Text = saved ? "Retained response appended and saved." : "Appended. Manuscript saving needs attention.";
         if (saved && story.Memory.Enabled && story.Memory.AutomaticProposals) await ProposeMemoryUpdateAsync();
         }

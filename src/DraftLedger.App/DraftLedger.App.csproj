@@ -6,12 +6,12 @@
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <AssemblyName>DraftLedger</AssemblyName>
     <RootNamespace>DraftLedger.App</RootNamespace>
-    <Version>0.3.0</Version>
+    <Version>0.3.2</Version>
     <ApplicationIcon>Assets\DraftLedger.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <DebugType>embedded</DebugType>
   </PropertyGroup>
   <ItemGroup><ProjectReference Include="../DraftLedger.Core/DraftLedger.Core.csproj" /></ItemGroup>
   <ItemGroup><PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.0" /></ItemGroup>
-  <ItemGroup><Resource Include="Assets\DraftLedger.ico" /></ItemGroup>
+  <ItemGroup><Resource Include="Assets\DraftLedger.ico" /><Resource Include="Assets\DraftLedger-256.png" /></ItemGroup>
 </Project>

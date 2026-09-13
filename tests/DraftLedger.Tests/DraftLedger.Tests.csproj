@@ -3,10 +3,13 @@
   <ItemGroup><ProjectReference Include="../../src/DraftLedger.Core/DraftLedger.Core.csproj" /></ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="../../src/DraftLedger.App/MainWindow.xaml" LogicalName="MainWindow.xaml" />
+    <EmbeddedResource Include="../../src/DraftLedger.App/MainWindow.xaml.cs" LogicalName="MainWindow.xaml.cs" />
     <EmbeddedResource Include="../../src/DraftLedger.App/App.xaml" LogicalName="AppStyles.xaml" />
     <EmbeddedResource Include="../../src/DraftLedger.App/AiWritingWindow.xaml" LogicalName="AiWritingWindow.xaml" />
     <EmbeddedResource Include="../../src/DraftLedger.App/MemoryWindow.xaml" LogicalName="MemoryWindow.xaml" />
     <EmbeddedResource Include="../../src/DraftLedger.App/StoryDetailsWindow.xaml" LogicalName="StoryDetailsWindow.xaml" />
     <EmbeddedResource Include="../../src/DraftLedger.App/Assets/DraftLedger.ico" LogicalName="DraftLedger.ico" />
+    <EmbeddedResource Include="../../src/DraftLedger.App/Assets/DraftLedger-256.png" LogicalName="DraftLedger-256.png" />
+    <EmbeddedResource Include="../../src/DraftLedger.App/ThemeCatalog.cs" LogicalName="ThemeCatalog.cs" />
   </ItemGroup>
 </Project>

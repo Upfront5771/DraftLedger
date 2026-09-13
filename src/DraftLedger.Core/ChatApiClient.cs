@@ -73,7 +73,7 @@ public sealed class ChatApiClient : IDisposable
         if (connection.RetryAfter > DateTimeOffset.UtcNow) throw new ApiFailure($"The provider requested a cooldown until {connection.RetryAfter.Value.LocalDateTime:T}.", 429, connection.RetryAfter);
         if (key.Any(char.IsWhiteSpace)) throw new InvalidDataException("An API key cannot contain whitespace.");
         var request = new HttpRequestMessage(method, new Uri(ApiEndpoint.Normalize(connection), path));
-        request.Headers.UserAgent.ParseAdd("DraftLedger/0.3.0");
+        request.Headers.UserAgent.ParseAdd("DraftLedger/0.3.2");
         if (key.Length > 0) request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", key);
         if (connection.Kind == ApiKind.OpenRouter) request.Headers.Add("X-OpenRouter-Title", "DraftLedger");
         return request;

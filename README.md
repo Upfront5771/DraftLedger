@@ -15,23 +15,23 @@ AI writing features are optional. Connect OpenAI, OpenRouter, LM Studio, or anot
 
 ## Screenshots
 
-The following images are repository placeholders. Replace them with current application screenshots while keeping the same filenames or update the links below.
+Current screenshots of the main workspace, themes, AI writing, and long-story memory:
 
 | Main writing workspace | Themes |
 | --- | --- |
-| ![DraftLedger main interface screenshot placeholder](docs/screenshots/writing_library.png) | ![DraftLedger themes screenshot placeholder](docs/screenshots/themes.png) |
+| ![DraftLedger main interface](docs/screenshots/writing_library.png) | ![DraftLedger themes](docs/screenshots/themes.png) |
 | **AI writing** | **Memory and continuity** |
-| ![DraftLedger AI writing screenshot placeholder](docs/screenshots/ai_writing.png) | ![DraftLedger memory screenshot placeholder](docs/screenshots/memory.png) |
+| ![DraftLedger AI writing](docs/screenshots/ai_writing.png) | ![DraftLedger memory](docs/screenshots/memory.png) |
 
 ## Highlights
 
 ### Writing workspace
 
 - Organize manuscripts into stories, chapters, and sections
-- Write or paste Markdown in the Editor and view formatted prose in Read
+- Write or paste Markdown in the Editor and view formatted prose in Preview
 - Live section, chapter, story, and library word counts
 - Search and replace within the current story
-- Adjustable fonts, themes, spell checking, and focus mode
+- Eleven themes, expanded font choices, spell checking, and full-width focus mode
 - Wider resizable right pane with collapsible tools
 - Automatic saving, snapshots, conflict copies, and portable ZIP backups
 - Import and export plain text and Markdown
@@ -41,6 +41,8 @@ The following images are repository placeholders. Replace them with current appl
 - OpenAI, OpenRouter, LM Studio, and custom OpenAI-compatible connections
 - Searchable provider model lists
 - Reusable connection and generation presets
+- Full-page Input, Output, Lorebooks, and Context / Request tabs beside Editor and Preview
+- Inline model-preset editing in the API Connections window
 - Windows-encrypted API-key storage
 - Streaming, cancellation, and supported reasoning controls
 - SillyTavern chat-completion preset and lorebook imports
@@ -144,7 +146,7 @@ For Windows ARM64:
 
 Every push and pull request runs the Windows build workflow. It executes the core tests, native WPF regression tests, and produces a downloadable build artifact.
 
-The DraftLedger 0.3.0 release passed **93 automated checks** with zero build warnings or errors. See [the validation record](docs/VALIDATION.md) for covered behavior and remaining interactive Windows checks.
+DraftLedger 0.3.2 passed **103 automated checks** with zero build warnings or errors. See [the validation record](docs/VALIDATION.md) for covered behavior and remaining interactive Windows checks.
 
 ## Repository layout
 

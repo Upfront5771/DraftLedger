@@ -1,4 +1,22 @@
-# DraftLedger 0.3.0 preview
+# DraftLedger 0.3.2 preview
+
+## Expanded writing workspace
+
+- AI Writing is now a full-size main workspace beside Editor and Preview.
+- AI Writing contains Input, Output, Lorebooks, and Context / Request tabs.
+- Input and editable Output use full editor controls with spell checking, undo, and redo.
+- Generated output remains separate until the writer explicitly appends it.
+- API connection and model-preset management remains in the right pane.
+- Preset settings are now edited inline in the API Connections window instead of a second popup.
+- Story Details and Settings are inline expandable sections in the right pane.
+- Connection and preset selectors display their saved friendly names.
+
+## Appearance and focus mode
+
+- Focus mode now removes the outline, details pane, and splitter space so the active writing page fills the window.
+- Added Warm Sepia, Ocean Mist, Forest Night, and Plum Noir themes.
+- Added Aptos, Arial, Cambria, Cascadia Mono, Courier New, Garamond, Palatino Linotype, Tahoma, Trebuchet MS, and Verdana font choices.
+- The in-application logo now uses a 256 by 256 source image for sharper rendering.
 
 ## Optional long-story memory
 
@@ -22,7 +40,7 @@ AI requests can combine approved structured memory with a bounded set of relevan
 
 ## Workspace and AI improvements
 
-- The right pane is wider and resizable, with collapsible At a Glance, Scene Notes, Memory, AI Writing, Settings, and Files & Recovery sections.
+- The right pane is wider and resizable, with collapsible At a Glance, Scene Notes, Memory, API Connections, Story Details, Settings, and Files & Recovery sections.
 - Generated AI output is editable before it is appended.
 - Typing in the model selector filters the list by any matching characters in its ID or display name.
 - Saved connection and preset selectors display their friendly names.
@@ -37,6 +55,6 @@ Deleting story memory is recoverable: the memory folder is moved into the projec
 
 ## Validation and constraints
 
-Release compilation passes with zero warnings and errors. The cross-platform suite has **93 passing checks**, including memory opt-in, retrieval, prompt injection, portable storage, proposal parsing and approval, stale-summary warnings, external-edit conflicts, recoverable deletion, resizable workspace controls, editable output, model filtering, synopsis generation, and the existing writing and AI workflows.
+Release compilation passes with zero warnings and errors. The cross-platform suite has **103 passing checks**, including memory opt-in, retrieval, prompt injection, portable storage, proposal parsing and approval, stale-summary warnings, external-edit conflicts, recoverable deletion, the full AI workspace, inline settings, editable output, model filtering, synopsis generation, focus mode, themes, fonts, and icon assets.
 
 The Windows-only WPF regression executable compiles successfully but requires Windows to run. The graphical interface, DPAPI credential round trip, and live provider interoperability were not executed in this Linux build environment.

@@ -35,6 +35,11 @@ public partial class MainWindow : Window
     private object? dragNode;
     private GridLength detailsWidth = new(360);
     private static readonly string[] Statuses = ["Planned", "Drafting", "Revising", "Complete"];
+    private static readonly string[] EditorFonts = ["Georgia", "Segoe UI", "Aptos", "Arial", "Calibri", "Cambria", "Cascadia Mono", "Consolas", "Courier New", "Garamond", "Palatino Linotype", "Tahoma", "Times New Roman", "Trebuchet MS", "Verdana"];
+    private AiWritingWindow? aiWritingSurface;
+    private readonly ChatApiClient synopsisClient = new();
+    private CancellationTokenSource? synopsisCancellation;
+    private bool synopsisBusy;
 
     public MainWindow()
     {
@@ -45,6 +50,7 @@ public partial class MainWindow : Window
         settings.FontSize = Math.Clamp(settings.FontSize, 10, 48);
         store = new(settings);
         InitializeComponent();
+        InitializeInlineSettings();
         ApplyAppearance();
         saveTimer.Tick += (_, _) => { saveTimer.Stop(); SavePending(); };
         LoadLibrary(); loading = false; RefreshLibrary();
@@ -118,6 +124,7 @@ public partial class MainWindow : Window
     private void OpenStory(Story target)
     {
         if (!SavePending()) return;
+        if (aiWritingSurface is not null && !aiWritingSurface.TryShutdown()) return; AiWritingHost.Content = null; aiWritingSurface = null;
         var fresh = store.Load(target.Folder);
         int i = stories.IndexOf(target); if (i >= 0) stories[i] = fresh;
         story = fresh; chapter = null; section = null;
@@ -128,6 +135,7 @@ public partial class MainWindow : Window
         RefreshOutline();
         var firstChapter = story.Chapters.FirstOrDefault();
         SetSection(firstChapter, firstChapter?.Sections.FirstOrDefault());
+        LoadStoryDetailsPanel(); InitializeAiWritingSurface();
         SelectNode(section ?? (object?)firstChapter); RefreshStatistics();
     }
 
@@ -165,7 +173,32 @@ public partial class MainWindow : Window
         SceneNotes.Text = section?.Purpose ?? ""; SceneNotes.IsEnabled = section is not null;
         SectionTitle.Text = section?.Title ?? "Add a section to start writing";
         Breadcrumb.Text = chapter?.Title ?? "";
-        loading = false; if (ReadTab.IsSelected) RefreshReading(); RefreshStatistics();
+        loading = false; if (chapter is not null && section is not null) aiWritingSurface?.SetTarget(chapter, section); if (ReadTab.IsSelected) RefreshReading(); RefreshStatistics();
+    }
+
+    private void InitializeAiWritingSurface()
+    {
+        if (story is null || chapter is null || section is null) { AiWritingHost.Content = null; return; }
+        aiWritingSurface = new AiWritingWindow(AiConfigPath, BuildWritingContext, AppendGeneratedText, Path.Combine(story.Folder, "recovery"), story, chapter, section, store);
+        AiWritingHost.Content = aiWritingSurface.DetachWritingSurface(settings.Font, settings.FontSize, settings.SpellCheck, settings.Language);
+        RefreshAiConfigurationSummary();
+    }
+
+    private void RefreshAiConfigurationSummary()
+    {
+        try
+        {
+            var ai = new AiSettingsFile(AiConfigPath).Load();
+            var connection = ai.Connections.FirstOrDefault(c => c.Id == ai.LastConnection) ?? ai.Connections.FirstOrDefault();
+            var presetValue = ai.Presets.FirstOrDefault(p => p.Id == ai.LastPreset) ?? ai.Presets.FirstOrDefault();
+            ApiConnectionSummary.Text = connection?.Name ?? "No connection selected";
+            ApiPresetSummary.Text = presetValue is null ? "No preset selected" : $"{presetValue.Name} · {presetValue.Model}";
+        }
+        catch (Exception ex)
+        {
+            ApiConnectionSummary.Text = "API settings need attention";
+            ApiPresetSummary.Text = ex.Message;
+        }
     }
 
     private void RefreshStatistics()
@@ -223,9 +256,9 @@ public partial class MainWindow : Window
         {
             FindPanel.Visibility = Visibility.Collapsed;
             RefreshReading();
-            EditorHint.Text = "Read view · Select and copy formatted text. Switch to Editor to make changes.";
+            EditorHint.Text = "Preview · Select and copy formatted text. Switch to Editor to make changes.";
         }
-        else EditorHint.Text = "Use *italics* or **bold**. Your draft saves automatically.";
+        else if (AiTab.IsSelected) EditorHint.Text = "AI output remains separate until you choose Append to section."; else EditorHint.Text = "Use *italics* or **bold**. Your draft saves automatically.";
         UpdateSelectionCount();
     }
     private void RefreshReading()
@@ -242,12 +275,12 @@ public partial class MainWindow : Window
             // Keep both modes usable even if a particular document cannot be formatted.
             Reader.Document = new System.Windows.Documents.FlowDocument(new System.Windows.Documents.Paragraph(new System.Windows.Documents.Run(Editor.Text)))
             { FontFamily = new FontFamily(settings.Font), FontSize = settings.FontSize, FontWeight = FontWeights.Normal, Foreground = (Brush)FindResource("InkBrush"), PagePadding = new Thickness(44, 30, 44, 54) };
-            SaveStatus.Text = "Read formatting unavailable; showing original text";
+            SaveStatus.Text = "Preview formatting unavailable; showing original text";
             Debug.WriteLine(ex);
         }
         Reader.ScrollToHome();
     }
-    private void FocusWritingPane() { if (ReadTab.IsSelected) Reader.Focus(); else Editor.Focus(); }
+    private void FocusWritingPane() { if (AiTab.IsSelected) aiWritingSurface?.FocusInput(); else if (ReadTab.IsSelected) Reader.Focus(); else Editor.Focus(); }
     private void SceneNotes_TextChanged(object sender, TextChangedEventArgs e) { if (!loading && section is not null) { section.Purpose = SceneNotes.Text; metadataDirty = true; ScheduleSave(); } }
     private void Outline_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
     {
@@ -366,12 +399,24 @@ public partial class MainWindow : Window
 
     private void StoryDetails_Click(object sender, RoutedEventArgs e) => Guard(() =>
     {
-        if (story is null) return;
-        if (!SavePending()) return; var window = new StoryDetailsWindow(story, AiConfigPath) { Owner = this }; window.ShowDialog(); if (!window.Saved) return; metadataDirty = true; if (!SavePending()) return;
-        StoryTitle.Text = story.Title; Title = story.Title + " | DraftLedger";
-        RefreshMemorySummary();
+        if (story is null) return; StoryDetailsExpander.IsExpanded = true; StoryDetailsExpander.BringIntoView(); StoryTitleBox.Focus();
     });
     private static bool ValidNonnegative(string value) => int.TryParse(value, out var n) && n is >= 0 and <= 10000000;
+    private void LoadStoryDetailsPanel() { if (story is null) return; bool wasLoading = loading; loading = true; StoryStatusSelector.ItemsSource = Statuses; StoryTitleBox.Text = story.Title; StoryAuthorBox.Text = story.Author; StoryStatusSelector.SelectedItem = story.Status; StoryTargetBox.Text = story.Target.ToString(CultureInfo.InvariantCulture); StorySynopsisBox.Text = story.Synopsis; StoryDetailsStatus.Text = "Changes stay here until you save them."; loading = wasLoading; }
+    private void SaveStoryDetails_Click(object sender, RoutedEventArgs e) => Guard(() => { if (story is null) return; if (string.IsNullOrWhiteSpace(StoryTitleBox.Text)) { StoryDetailsStatus.Text = "Enter a story title."; return; } if (!ValidNonnegative(StoryTargetBox.Text)) { StoryDetailsStatus.Text = "Enter a valid word target."; return; } story.Title = StoryTitleBox.Text.Trim(); story.Author = StoryAuthorBox.Text.Trim(); story.Status = StoryStatusSelector.SelectedItem?.ToString() ?? "Drafting"; story.Target = int.Parse(StoryTargetBox.Text); story.Synopsis = StorySynopsisBox.Text.Trim(); metadataDirty = true; if (!SavePending()) return; StoryTitle.Text = story.Title; Title = story.Title + " | DraftLedger"; StoryDetailsStatus.Text = "Story details saved locally."; RefreshStatistics(); });
+    private async void GenerateSynopsis_Click(object sender, RoutedEventArgs e)
+    {
+        if (story is null || synopsisBusy) return;
+        try
+        {
+            if (!SavePending()) return; var ai = new AiSettingsFile(AiConfigPath).Load(); var connection = ai.Connections.FirstOrDefault(c => c.Id == ai.LastConnection) ?? throw new InvalidOperationException("Choose an API connection first."); var preset = ai.Presets.FirstOrDefault(p => p.Id == ai.LastPreset) ?? throw new InvalidOperationException("Choose an AI preset first.");
+            string manuscript = ProjectStore.Export(story, null, null, false); var messages = new List<ChatMessage> { new("system", "Write one concise paragraph that accurately summarizes the supplied story. Do not invent details. Return only the synopsis."), new("user", manuscript.Length <= 210000 ? manuscript : manuscript[..105000] + "\n\n" + manuscript[^105000..]) }; var prepared = new PreparedChat(messages, [], [], messages.Sum(m => m.Content.Length));
+            var requestPreset = JsonSerializer.Deserialize<ModelPreset>(JsonSerializer.Serialize(preset, ProjectStore.Json), ProjectStore.Json)!; requestPreset.Stream = false; requestPreset.Temperature = 0.3; requestPreset.MaxTokens = Math.Max(700, Math.Min(2000, preset.MaxTokens)); var body = ChatApiClient.BuildRequest(connection, requestPreset, prepared, connection.Models.FirstOrDefault(m => m.Id == requestPreset.Model)); body["stream"] = false;
+            synopsisCancellation = new(); synopsisBusy = true; GenerateSynopsisButton.IsEnabled = false; var result = await synopsisClient.GenerateAsync(connection, AiSettingsFile.Unprotect(connection), body, _ => { }, synopsisCancellation.Token); StorySynopsisBox.Text = result.Text.Trim(); StoryDetailsStatus.Text = "Synopsis generated. Edit it, then save story details.";
+        }
+        catch (Exception ex) { StoryDetailsStatus.Text = ex.Message; }
+        finally { synopsisBusy = false; synopsisCancellation?.Dispose(); synopsisCancellation = null; GenerateSynopsisButton.IsEnabled = true; }
+    }
 
     private void Import_Click(object sender, RoutedEventArgs e) => Guard(() =>
     {
@@ -507,8 +552,11 @@ public partial class MainWindow : Window
             return;
         }
         if (!SavePending()) return;
+        aiWritingSurface?.SaveState();
         var window = new AiWritingWindow(AiConfigPath, BuildWritingContext, AppendGeneratedText, Path.Combine(story.Folder, "recovery"), story, chapter, section, store) { Owner = this };
         window.ShowDialog();
+        aiWritingSurface?.ReloadConfiguration();
+        RefreshAiConfigurationSummary();
         RefreshStatistics();
     });
 
@@ -558,12 +606,20 @@ public partial class MainWindow : Window
         return new(story.Id, story.Title, story.Synopsis, chapter.Title, section.Id, section.Title, Editor.Text, manuscript.ToString());
     }
 
-    private bool AppendGeneratedText(string generated)
+    private bool AppendGeneratedText(Guid targetSectionId, string generated)
     {
-        if (story is null || chapter is null || section is null || string.IsNullOrWhiteSpace(generated)) return false;
+        if (story is null || string.IsNullOrWhiteSpace(generated)) return false;
+        var targetChapter = story.Chapters.FirstOrDefault(c => c.Sections.Any(s => s.Id == targetSectionId));
+        var targetSection = targetChapter?.Sections.FirstOrDefault(s => s.Id == targetSectionId);
+        if (targetChapter is null || targetSection is null) return false;
+        if (section?.Id != targetSectionId)
+        {
+            if (!SavePending()) return false;
+            SetSection(targetChapter, targetSection); SelectNode(targetSection);
+        }
         string addition = generated.Trim('\r', '\n');
         if (addition.Length == 0) return false;
-        store.SnapshotNow(story, section);
+        store.SnapshotNow(story, targetSection);
         string separator = Editor.Text.Length == 0 ? "" : Editor.Text.EndsWith("\n\n", StringComparison.Ordinal) ? "" : Editor.Text.EndsWith('\n') ? "\n" : "\n\n";
         EditorTab.IsSelected = true;
         Editor.Select(Editor.Text.Length, 0);
@@ -578,33 +634,31 @@ public partial class MainWindow : Window
         if (WorkspacePanel.Visibility != Visibility.Visible) return;
         focusMode = !focusMode;
         if (focusMode && DetailsColumn.ActualWidth > 0) detailsWidth = DetailsColumn.Width;
-        OutlineColumn.Width = new(focusMode ? 0 : 270); DetailsColumn.Width = focusMode ? new(0) : detailsWidth; DetailsSplitter.Visibility = focusMode ? Visibility.Collapsed : Visibility.Visible;
+        OutlineColumn.Width = new(focusMode ? 0 : 270); DetailsSplitterColumn.Width = new(focusMode ? 0 : 6); DetailsColumn.MinWidth = focusMode ? 0 : 280; DetailsColumn.Width = focusMode ? new(0) : detailsWidth; DetailsSplitter.Visibility = focusMode ? Visibility.Collapsed : Visibility.Visible;
         OutlinePanel.Visibility = DetailsPanel.Visibility = focusMode ? Visibility.Collapsed : Visibility.Visible;
         StatusCounts.Visibility = focusMode ? Visibility.Collapsed : Visibility.Visible;
         WindowState = focusMode ? WindowState.Maximized : WindowState.Normal; FocusWritingPane();
     }
-    private void Settings_Click(object sender, RoutedEventArgs e) => Guard(() =>
+    private void InitializeInlineSettings()
+    {
+        ThemeSelector.ItemsSource = ThemeCatalog.Names; EditorFontSelector.ItemsSource = EditorFonts; LanguageSelector.ItemsSource = new[] { "en-US", "en-GB", "fr-FR", "de-DE", "es-ES" }; HyphenSelector.ItemsSource = new[] { "One word", "Separate words" }; LoadSettingsPanel();
+    }
+    private void LoadSettingsPanel()
+    {
+        ThemeSelector.SelectedItem = settings.Theme; EditorFontSelector.SelectedItem = settings.Font; if (EditorFontSelector.SelectedItem is null) EditorFontSelector.Text = settings.Font; FontSizeBox.Text = settings.FontSize.ToString(CultureInfo.InvariantCulture); SpellCheckToggle.IsChecked = settings.SpellCheck; LanguageSelector.SelectedItem = settings.Language; HyphenSelector.SelectedItem = settings.JoinHyphens ? "One word" : "Separate words"; CountNumbersToggle.IsChecked = settings.CountNumbers; SnapshotMinutesBox.Text = settings.SnapshotMinutes.ToString(CultureInfo.InvariantCulture); SnapshotRetentionBox.Text = settings.SnapshotRetention.ToString(CultureInfo.InvariantCulture); DailyTargetBox.Text = settings.DailyTarget.ToString(CultureInfo.InvariantCulture); DefaultStoryTargetBox.Text = settings.DefaultStoryTarget.ToString(CultureInfo.InvariantCulture); StorageRootBox.Text = settings.StorageRoot; SettingsStatus.Text = "Settings apply to this app and future projects.";
+    }
+    private void Settings_Click(object sender, RoutedEventArgs e) => Guard(() => { SettingsExpander.IsExpanded = true; SettingsExpander.BringIntoView(); ThemeSelector.Focus(); });
+    private void ApplySettings_Click(object sender, RoutedEventArgs e) => Guard(() =>
     {
         if (!SavePending()) return;
-        var v = Dialogs.Form(this, "Settings", [new("Theme", settings.Theme, ThemeCatalog.Names), new("Editor font", settings.Font, ["Georgia", "Segoe UI", "Consolas", "Calibri", "Times New Roman"]), new("Font size", settings.FontSize.ToString(CultureInfo.InvariantCulture)), new("Spell check", settings.SpellCheck ? "On" : "Off", ["On", "Off"]), new("Spell-check language", settings.Language, ["en-US", "en-GB", "fr-FR", "de-DE", "es-ES"]), new("Hyphenated words", settings.JoinHyphens ? "One word" : "Separate words", ["One word", "Separate words"]), new("Count numbers", settings.CountNumbers ? "Yes" : "No", ["Yes", "No"]), new("Snapshot interval (minutes)", settings.SnapshotMinutes.ToString()), new("Snapshots per section", settings.SnapshotRetention.ToString()), new("Daily word target", settings.DailyTarget.ToString()), new("Default story target", settings.DefaultStoryTarget.ToString()), new("New project location", settings.StorageRoot)], values =>
-        {
-            if (!double.TryParse(values["Font size"], NumberStyles.Number, CultureInfo.InvariantCulture, out double size) || !double.IsFinite(size) || size < 10 || size > 48) return "Font size must be 10 to 48.";
-            if (!int.TryParse(values["Snapshot interval (minutes)"], out int interval) || interval < 1 || interval > 1440) return "Snapshot interval must be 1 to 1440 minutes.";
-            if (!int.TryParse(values["Snapshots per section"], out int retention) || retention < 1 || retention > 1000) return "Snapshot retention must be 1 to 1000.";
-            if (!ValidNonnegative(values["Daily word target"]) || !ValidNonnegative(values["Default story target"])) return "Enter valid word targets.";
-            if (string.IsNullOrWhiteSpace(values["New project location"]) || !Path.IsPathFullyQualified(values["New project location"])) return "Use a full path for the project location.";
-            return null;
-        });
-        if (v is null) return;
-        string newRoot = Path.GetFullPath(v["New project location"]); Directory.CreateDirectory(newRoot);
-        // Register existing projects before changing the default, so no stories disappear.
-        foreach (var s in stories) if (!settings.ProjectFolders.Contains(s.Folder, StringComparer.OrdinalIgnoreCase)) settings.ProjectFolders.Add(s.Folder);
-        settings.Theme = v["Theme"]; settings.Font = v["Editor font"]; settings.FontSize = double.Parse(v["Font size"], CultureInfo.InvariantCulture);
-        settings.SpellCheck = v["Spell check"] == "On"; settings.Language = v["Spell-check language"]; settings.JoinHyphens = v["Hyphenated words"] == "One word"; settings.CountNumbers = v["Count numbers"] == "Yes";
-        settings.SnapshotMinutes = int.Parse(v["Snapshot interval (minutes)"]); settings.SnapshotRetention = int.Parse(v["Snapshots per section"]); settings.DailyTarget = int.Parse(v["Daily word target"]); settings.DefaultStoryTarget = int.Parse(v["Default story target"]); settings.StorageRoot = newRoot;
-        SaveSettings(); ApplyAppearance();
-        foreach (var s in stories) { foreach (var c in s.Chapters) { foreach (var sec in c.Sections) { sec.Statistics = WordCounter.Analyze(sec.Text, settings.JoinHyphens, settings.CountNumbers); sec.Refresh(); } c.Refresh(); } s.Refresh(); }
-        if (WorkspacePanel.Visibility == Visibility.Visible) RefreshStatistics(); else RefreshLibrary();
+        if (!double.TryParse(FontSizeBox.Text, NumberStyles.Number, CultureInfo.InvariantCulture, out double size) || !double.IsFinite(size) || size < 10 || size > 48) { SettingsStatus.Text = "Font size must be 10 to 48."; return; }
+        if (!int.TryParse(SnapshotMinutesBox.Text, out int interval) || interval is < 1 or > 1440) { SettingsStatus.Text = "Snapshot interval must be 1 to 1440 minutes."; return; }
+        if (!int.TryParse(SnapshotRetentionBox.Text, out int retention) || retention is < 1 or > 1000) { SettingsStatus.Text = "Snapshot retention must be 1 to 1000."; return; }
+        if (!ValidNonnegative(DailyTargetBox.Text) || !ValidNonnegative(DefaultStoryTargetBox.Text)) { SettingsStatus.Text = "Enter valid word targets."; return; }
+        if (string.IsNullOrWhiteSpace(StorageRootBox.Text) || !Path.IsPathFullyQualified(StorageRootBox.Text)) { SettingsStatus.Text = "Use a full path for the project location."; return; }
+        string newRoot = Path.GetFullPath(StorageRootBox.Text); Directory.CreateDirectory(newRoot); foreach (var s in stories) if (!settings.ProjectFolders.Contains(s.Folder, StringComparer.OrdinalIgnoreCase)) settings.ProjectFolders.Add(s.Folder);
+        settings.Theme = ThemeSelector.SelectedItem?.ToString() ?? "System"; settings.Font = EditorFontSelector.SelectedItem?.ToString() ?? EditorFontSelector.Text; settings.FontSize = size; settings.SpellCheck = SpellCheckToggle.IsChecked == true; settings.Language = LanguageSelector.SelectedItem?.ToString() ?? "en-US"; settings.JoinHyphens = HyphenSelector.SelectedItem?.ToString() != "Separate words"; settings.CountNumbers = CountNumbersToggle.IsChecked == true; settings.SnapshotMinutes = interval; settings.SnapshotRetention = retention; settings.DailyTarget = int.Parse(DailyTargetBox.Text); settings.DefaultStoryTarget = int.Parse(DefaultStoryTargetBox.Text); settings.StorageRoot = newRoot;
+        SaveSettings(); ApplyAppearance(); foreach (var s in stories) { foreach (var c in s.Chapters) { foreach (var sec in c.Sections) { sec.Statistics = WordCounter.Analyze(sec.Text, settings.JoinHyphens, settings.CountNumbers); sec.Refresh(); } c.Refresh(); } s.Refresh(); } SettingsStatus.Text = "Settings saved and applied."; if (WorkspacePanel.Visibility == Visibility.Visible) RefreshStatistics(); else RefreshLibrary();
     });
     private void ApplyAppearance()
     {
@@ -612,6 +666,7 @@ public partial class MainWindow : Window
         ThemeCatalog.Apply(Application.Current.Resources, ThemeCatalog.Resolve(settings.Theme, systemDark));
         Editor.FontFamily = new(settings.Font); Editor.FontSize = settings.FontSize;
         SpellCheck.SetIsEnabled(Editor, settings.SpellCheck); Editor.Language = XmlLanguage.GetLanguage(settings.Language);
+        SpellCheck.SetIsEnabled(StorySynopsisBox, settings.SpellCheck); StorySynopsisBox.Language = XmlLanguage.GetLanguage(settings.Language); aiWritingSurface?.ApplyEditorAppearance(settings.Font, settings.FontSize, settings.SpellCheck, settings.Language);
         renderedSource = null;
         if (ReadTab.IsSelected) RefreshReading();
     }
@@ -653,6 +708,8 @@ public partial class MainWindow : Window
     private void Window_Closing(object? sender, CancelEventArgs e)
     {
         if (!SavePending()) { e.Cancel = true; return; }
+        if (aiWritingSurface is not null && !aiWritingSurface.TryShutdown()) { e.Cancel = true; return; }
+        synopsisCancellation?.Cancel(); synopsisClient.Dispose();
         saveTimer.Stop(); RefreshIndex(); index?.Dispose();
     }
 }

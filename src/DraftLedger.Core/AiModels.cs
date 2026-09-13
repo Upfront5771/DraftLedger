@@ -20,6 +20,7 @@ public sealed class ApiConnection
     public List<ApiModel> Models { get; set; } = [];
     public DateTimeOffset? ModelsUpdated { get; set; }
     public DateTimeOffset? RetryAfter { get; set; }
+    public override string ToString() => Name;
 }
 
 public sealed class ApiModel
@@ -68,6 +69,7 @@ public sealed class ModelPreset
     public string CharacterDescription { get; set; } = "";
     public string CharacterPersonality { get; set; } = "";
     public string Persona { get; set; } = "";
+    public override string ToString() => Name;
 }
 
 public sealed class LoreEntry
